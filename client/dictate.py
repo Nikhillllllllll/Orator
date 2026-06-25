@@ -1,12 +1,16 @@
 """
-Wisper macOS dictation client.
+Wisper dictation client (macOS, Windows, Linux).
 
 Press Ctrl+Shift to start recording, press again to stop.
 Cleaned text is pasted at your cursor automatically.
 
 Requires:
-  - macOS Accessibility permission for this terminal app
   - Backend running at localhost:8000
+  - macOS: Accessibility permission for this terminal app
+  - Linux: a clipboard helper (`wl-clipboard`, `xclip`, or `xsel`)
+
+OS-specific integration (clipboard, paste, foreground-app and tab detection,
+app switching) lives in ``platforms.py``; this module is platform-neutral.
 """
 
 import json
@@ -21,6 +25,13 @@ import numpy as np
 import sounddevice as sd
 from pynput import keyboard
 from websockets.sync.client import connect as ws_connect
+
+try:  # works both as `python -m client.dictate` and `python client/dictate.py`
+    from client.platforms import get_platform
+except ImportError:
+    from platforms import get_platform
+
+PLATFORM = get_platform()
 
 SERVER_URL = "http://localhost:8000"
 SAMPLE_RATE = 16000
@@ -67,156 +78,31 @@ hotkey_active = False  # edge-trigger guard so key auto-repeat can't re-toggle
 send_q: "queue.Queue[bytes | None]" = queue.Queue()
 
 
-def get_active_app() -> str:
-    try:
-        result = subprocess.run(
-            ["osascript", "-e", 'tell application "System Events" to get name of first application process whose frontmost is true'],
-            capture_output=True, text=True, timeout=2,
-        )
-        name = result.stdout.strip().lower()
-        app_map = {
-            "slack": "slack",
-            "mail": "email",
-            "gmail": "email",
-            "outlook": "email",
-            "messages": "imessage",
-            "discord": "discord",
-            "code": "vscode",
-            "cursor": "vscode",
-            "notes": "notes",
-            "notion": "notes",
-            "google docs": "docs",
-        }
-        for key, val in app_map.items():
-            if key in name:
-                return val
-    except Exception:
-        pass
-    return "default"
-
-
-APP_ALIASES = {
-    "chrome": "Google Chrome",
-    "imessage": "Messages",
-    "messages": "Messages",
-    "vscode": "Visual Studio Code",
-    "code": "Visual Studio Code",
-    "iterm": "iTerm2",
-    "terminal": "Terminal",
-    "finder": "Finder",
-}
-
-
-def get_desktop_context() -> str:
-    parts = []
-    try:
-        result = subprocess.run(
-            ["osascript", "-e",
-             'tell application "System Events" to get name of every application process whose visible is true'],
-            capture_output=True, text=True, timeout=2,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            parts.append(f"Open apps: {result.stdout.strip()}")
-    except Exception:
-        pass
-
-    try:
-        result = subprocess.run(
-            ["osascript", "-e", '''
-tell application "System Events"
-    if not (exists process "Google Chrome") then return ""
-end tell
-tell application "Google Chrome"
-    set tabInfo to {}
-    set i to 1
-    repeat with t in tabs of front window
-        set end of tabInfo to (i as text) & ". " & title of t
-        set i to i + 1
-    end repeat
-    return my joinList(tabInfo, " | ")
-end tell
-on joinList(theList, delim)
-    set oldDelims to AppleScript's text item delimiters
-    set AppleScript's text item delimiters to delim
-    set result to theList as text
-    set AppleScript's text item delimiters to oldDelims
-    return result
-end joinList'''],
-            capture_output=True, text=True, timeout=3,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            parts.append(f"Chrome tabs: {result.stdout.strip()}")
-    except Exception:
-        pass
-
-    try:
-        result = subprocess.run(
-            ["osascript", "-e", '''
-tell application "System Events"
-    if not (exists process "Safari") then return ""
-end tell
-tell application "Safari"
-    set tabInfo to {}
-    set i to 1
-    repeat with t in tabs of front window
-        set end of tabInfo to (i as text) & ". " & name of t
-        set i to i + 1
-    end repeat
-    return my joinList(tabInfo, " | ")
-end tell
-on joinList(theList, delim)
-    set oldDelims to AppleScript's text item delimiters
-    set AppleScript's text item delimiters to delim
-    set result to theList as text
-    set AppleScript's text item delimiters to oldDelims
-    return result
-end joinList'''],
-            capture_output=True, text=True, timeout=3,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            parts.append(f"Safari tabs: {result.stdout.strip()}")
-    except Exception:
-        pass
-
-    return "\n".join(parts)
-
-
 def execute_command(data: dict):
     cmd = data.get("command", "")
     target = data.get("target")
 
     if cmd == "switch_app":
-        app_name = APP_ALIASES.get(str(target).lower(), str(target))
-        try:
-            subprocess.run(
-                ["osascript", "-e", f'tell application "{app_name}" to activate'],
-                capture_output=True, timeout=3,
-            )
-            print(f"\r🔀 Switched to {app_name}")
-        except Exception as e:
-            print(f"\r❌ Couldn't switch to {app_name}: {e}")
+        if PLATFORM.activate_app(str(target)):
+            print(f"\r🔀 Switched to {target}")
+        else:
+            print(f"\r❌ Couldn't switch to {target}")
 
     elif cmd == "switch_tab":
         tab_index = int(target) if target is not None else 1
-        try:
-            subprocess.run(
-                ["osascript", "-e",
-                 f'tell application "Google Chrome" to set active tab index of front window to {tab_index}'],
-                capture_output=True, timeout=3,
-            )
+        if PLATFORM.switch_browser_tab(tab_index):
             print(f"\r🔀 Switched to tab {tab_index}")
-        except Exception as e:
-            print(f"\r❌ Couldn't switch tab: {e}")
+        else:
+            print("\r❌ Couldn't switch tab")
 
     elif cmd == "open_url":
         url = str(target)
         if not url.startswith(("http://", "https://")):
             url = f"https://{url}"
-        try:
-            subprocess.run(["open", url], timeout=3)
+        if PLATFORM.open_url(url):
             print(f"\r🌐 Opened {url}")
-        except Exception as e:
-            print(f"\r❌ Couldn't open URL: {e}")
+        else:
+            print(f"\r❌ Couldn't open URL: {url}")
 
     else:
         print(f"\r🔧 Command: {cmd}")
@@ -290,8 +176,8 @@ def start_recording():
     global recording, stream
     if recording:
         return
-    app_context = get_active_app()
-    screen_text = get_desktop_context()
+    app_context = PLATFORM.active_app()
+    screen_text = PLATFORM.desktop_context()
     ws_url = SERVER_URL.replace("http://", "ws://").replace("https://", "wss://")
 
     try:
@@ -342,16 +228,12 @@ def stop_recording():
 
 
 def paste_text(text: str) -> bool:
-    process = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
-    process.communicate(text.encode("utf-8"))
-    result = subprocess.run(
-        ["osascript", "-e", 'tell application "System Events" to keystroke "v" using command down'],
-        capture_output=True, text=True, timeout=2,
+    if PLATFORM.copy_and_paste(text):
+        return True
+    print(
+        f"\r⚠️  Auto-paste failed. Text copied to clipboard — {PLATFORM.paste_combo} to paste."
     )
-    if result.returncode != 0:
-        print("\r⚠️  Auto-paste failed (grant Accessibility to your terminal app). Text copied to clipboard — Cmd+V to paste.")
-        return False
-    return True
+    return False
 
 
 def on_press(key):
@@ -389,16 +271,13 @@ def main():
     except Exception:
         print("  ⚠️  Backend not reachable — start it first")
 
-    check = subprocess.run(
-        ["osascript", "-e", 'tell application "System Events" to keystroke ""'],
-        capture_output=True, timeout=3,
-    )
-    if check.returncode != 0:
-        print("  ⚠️  Accessibility not granted — auto-paste won't work")
-        print("     Go to: System Settings → Privacy & Security → Accessibility")
-        print("     and add your terminal app. Text will still be copied to clipboard.")
+    if PLATFORM.input_permission_ok():
+        print("  ✅ Auto-paste ready")
     else:
-        print("  ✅ Accessibility granted")
+        print("  ⚠️  Auto-paste unavailable")
+        hint = PLATFORM.permission_hint()
+        if hint:
+            print(f"     {hint}")
 
     print()
     print("  Listening for hotkey... (Ctrl+C to quit)")

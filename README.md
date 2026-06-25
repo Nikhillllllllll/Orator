@@ -115,7 +115,10 @@ backend/
   models.py        — Pydantic request/response schemas
   utils.py         — Audio format detection, WAV decode, timing
 tests/             — pytest test suite
-client/            — Desktop client
+client/            — Cross-platform desktop client (macOS, Windows, Linux)
+  dictate.py       — Hotkey listener + streaming dictation (platform-neutral)
+  platforms.py     — Per-OS clipboard, paste, app/tab detection
+  toast.py         — Floating status HUD
 dictionary.txt     — Custom vocabulary (names, jargon, acronyms)
 ```
 
