@@ -349,7 +349,7 @@ def paste_text(text: str) -> bool:
         capture_output=True, text=True, timeout=2,
     )
     if result.returncode != 0:
-        print(f"\r⚠️  Auto-paste failed (grant Accessibility to your terminal app). Text copied to clipboard — Cmd+V to paste.")
+        print("\r⚠️  Auto-paste failed (grant Accessibility to your terminal app). Text copied to clipboard — Cmd+V to paste.")
         return False
     return True
 
@@ -379,7 +379,7 @@ def main():
     print("=" * 50)
     print("  Wisper — Voice Dictation")
     print("=" * 50)
-    print(f"  Hotkey:  Left Ctrl + Left Shift")
+    print("  Hotkey:  Left Ctrl + Left Shift")
     print(f"  Server:  {SERVER_URL}")
     print()
 

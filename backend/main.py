@@ -5,13 +5,11 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
-
 from pydantic import BaseModel
 
 from backend.config import settings
-from backend.models import TranscribeMetadata
 from backend.llm import is_command_response
+from backend.models import TranscribeMetadata
 from backend.pipeline import (
     cleanup_transcript,
     describe_voice,

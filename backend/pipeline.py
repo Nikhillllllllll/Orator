@@ -2,7 +2,12 @@ import logging
 
 from backend.asr import ASRProvider, ASRResult, get_asr_provider
 from backend.llm import LLMProvider, get_llm_provider, is_command_response
-from backend.models import CommandResponse, RawTranscribeResponse, TranscribeMetadata, TranscribeResponse
+from backend.models import (
+    CommandResponse,
+    RawTranscribeResponse,
+    TranscribeMetadata,
+    TranscribeResponse,
+)
 from backend.utils import Timer, audio_stats
 from backend.vocabulary import load_dictionary, merge_terms
 

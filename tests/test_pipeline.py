@@ -1,7 +1,8 @@
 """Pipeline tests — unit tests with mocked providers, integration test marker for live API."""
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from backend.asr import ASRResult
 from backend.models import TranscribeMetadata

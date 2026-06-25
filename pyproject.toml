@@ -14,11 +14,6 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Multimedia :: Sound/Audio :: Speech",
 ]
-
-[project.urls]
-Homepage = "https://github.com/YOUR_USERNAME/wisper"
-Repository = "https://github.com/YOUR_USERNAME/wisper"
-Issues = "https://github.com/YOUR_USERNAME/wisper/issues"
 dependencies = [
     "anthropic>=0.105.2",
     "deepgram-sdk>=7.3.1",
@@ -37,6 +32,11 @@ dependencies = [
     "websockets>=16.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/Nikhillllllllll/Orator"
+Repository = "https://github.com/Nikhillllllllll/Orator"
+Issues = "https://github.com/Nikhillllllllll/Orator/issues"
+
 [project.optional-dependencies]
 # Offline ASR — `uv sync --extra local`
 local = [
@@ -51,7 +51,20 @@ mlx = [
 dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
+    "ruff>=0.9.0",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I import sorting, UP pyupgrade, B bugbear
+select = ["E", "W", "F", "I", "UP", "B"]
+ignore = [
+    "E501",  # line length handled by the formatter, not enforced as a lint error
+    "B008",  # FastAPI relies on function calls (File/Form/Depends) in argument defaults
+]

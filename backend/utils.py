@@ -2,7 +2,6 @@ import asyncio
 import io
 import time
 import wave
-from pathlib import Path
 
 import numpy as np
 
