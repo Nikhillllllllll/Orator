@@ -35,8 +35,8 @@ uv run dictate                # start backend + desktop dictation in one command
 ```
 
 `uv run dictate` ensures the backend is running, then starts the desktop client.
-To record, **click the floating ● button** or press the hotkey (**Left Ctrl +
-Left Shift**); cleaned text is pasted at your cursor.
+Press the hotkey (**Left Ctrl + Left Shift**) to start recording, press it again
+to stop; cleaned text is pasted at your cursor.
 
 The backend runs as a **persistent, detached service** — it keeps running when
 you quit the client or close the terminal, and is reused next time. Manage it
@@ -48,8 +48,7 @@ uv run dictate --stop     # stop the backend
 ```
 
 Other knobs: `WISPER_DEBUG=1` surfaces backend logs and otherwise-silent client
-errors; `WISPER_NO_OVERLAY=1` runs hotkey-only (no floating button). Logs are
-written to `logs/backend.log` and `logs/client.log`.
+errors. Logs are written to `logs/backend.log` and `logs/client.log`.
 
 **Permissions** (first run): grant **Microphone** access, and on macOS also
 **Accessibility** (System Settings → Privacy & Security → Accessibility) so
