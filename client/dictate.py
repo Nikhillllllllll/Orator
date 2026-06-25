@@ -20,6 +20,8 @@ import queue
 import subprocess
 import sys
 import threading
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 import httpx
 import numpy as np
@@ -29,9 +31,11 @@ from websockets.sync.client import connect as ws_connect
 
 try:  # works both as `python -m client.dictate` and `python client/dictate.py`
     from client.diagnostics import describe_no_speech
+    from client.overlay import run_overlay
     from client.platforms import get_platform
 except ImportError:
     from diagnostics import describe_no_speech
+    from overlay import run_overlay
     from platforms import get_platform
 
 PLATFORM = get_platform()
@@ -52,10 +56,26 @@ TOAST_TRANSCRIBING = ("●  Transcribing…", "#b9770e")
 TOAST_TYPING = ("●  Typing…", "#1e8449")
 _toast_proc: subprocess.Popen | None = None
 
+# Recording state, shared with the floating overlay (which polls current_status).
+# When the overlay is active it shows status itself, so the toast HUD is muted.
+_overlay_active = False
+_status = "idle"  # one of: idle, recording, processing
+
+
+def _set_status(name: str) -> None:
+    global _status
+    _status = name
+
+
+def current_status() -> str:
+    return _status
+
 
 def show_toast(spec: tuple[str, str]) -> None:
     """Display a floating status HUD, replacing any current one."""
     global _toast_proc
+    if _overlay_active:
+        return  # the overlay renders status itself
     hide_toast()
     message, color = spec
     try:
@@ -161,16 +181,24 @@ def receiver_loop(conn, app_context: str):
                     return
                 text = data.get("text", "")
                 if not text:
+                    logger.warning(
+                        "no speech detected (app=%s rms=%s threshold=%s)",
+                        app_context, data.get("audio_rms"), data.get("silence_threshold"),
+                    )
                     msg = describe_no_speech(
                         data.get("audio_rms"), data.get("silence_threshold")
                     )
                     print(f"\r⚠️  {msg}")
                     return
+                _set_status("processing")
                 show_toast(TOAST_TYPING)
                 pasted = paste_text(text)
                 timing = data.get("timing", {})
                 total = timing.get("total", "?")
                 label = "Pasted" if pasted else "Copied"
+                logger.info(
+                    "final (app=%s, %ss, %s): %r", app_context, total, label.lower(), text
+                )
                 clipped = text[:60] + ("…" if len(text) > 60 else "")
                 print(f"\r✅ {label} ({total}s) | {app_context} | \"{clipped}\"")
                 return
@@ -178,6 +206,7 @@ def receiver_loop(conn, app_context: str):
         logger.debug("Receiver loop error", exc_info=True)
         print(f"\r❌ Stream error: {e}                          ")
     finally:
+        _set_status("idle")
         hide_toast()
         try:
             conn.close()
@@ -212,6 +241,8 @@ def start_recording():
         send_q.get_nowait()
 
     recording = True
+    _set_status("recording")
+    logger.info("recording started (app=%s)", app_context)
     threading.Thread(target=sender_loop, args=(conn,), daemon=True).start()
     threading.Thread(target=receiver_loop, args=(conn, app_context), daemon=True).start()
 
@@ -224,7 +255,7 @@ def start_recording():
     )
     stream.start()
     show_toast(TOAST_RECORDING)
-    print("\r🎙  Recording... (press hotkey again to stop)", end="", flush=True)
+    print("\r🎙  Recording... (click/hotkey again to stop)", end="", flush=True)
 
 
 def stop_recording():
@@ -232,6 +263,7 @@ def stop_recording():
     if not recording:
         return
     recording = False
+    _set_status("processing")
     if stream:
         stream.stop()
         stream.close()
@@ -239,6 +271,15 @@ def stop_recording():
     send_q.put(None)  # tell sender to flush remaining audio and send END
     show_toast(TOAST_TRANSCRIBING)
     print("\r⏳ Processing...                              ", end="", flush=True)
+
+
+def toggle_recording() -> None:
+    """Start or stop recording — the entry point for both the hotkey and the
+    floating button."""
+    if recording:
+        stop_recording()
+    else:
+        start_recording()
 
 
 def paste_text(text: str) -> bool:
@@ -258,10 +299,7 @@ def on_press(key):
     # start/stop many times per second.
     if HOTKEY.issubset(current_keys) and not hotkey_active:
         hotkey_active = True
-        if recording:
-            stop_recording()
-        else:
-            start_recording()
+        toggle_recording()
 
 
 def on_release(key):
@@ -271,18 +309,45 @@ def on_release(key):
         hotkey_active = False
 
 
-def main():
-    if os.environ.get("WISPER_DEBUG"):
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format="%(asctime)s %(levelname)s %(name)s — %(message)s",
+LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
+
+
+def _configure_logging() -> None:
+    """Always log to a rotating file so dropped phrases stay reviewable; mirror
+    to the console only when WISPER_DEBUG is set."""
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s — %(message)s")
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False
+
+    try:
+        LOG_DIR.mkdir(exist_ok=True)
+        fileh = RotatingFileHandler(
+            LOG_DIR / "client.log", maxBytes=1_000_000, backupCount=3
         )
+        fileh.setFormatter(fmt)
+        logger.addHandler(fileh)
+    except OSError:
+        pass  # logging to file is best-effort; never block dictation on it
+
+    if os.environ.get("WISPER_DEBUG"):
+        console = logging.StreamHandler()
+        console.setFormatter(fmt)
+        logger.addHandler(console)
+
+
+def main():
+    _configure_logging()
+    overlay_enabled = not os.environ.get("WISPER_NO_OVERLAY")
 
     print("=" * 50)
     print("  Wisper — Voice Dictation")
     print("=" * 50)
-    print("  Hotkey:  Left Ctrl + Left Shift")
+    if overlay_enabled:
+        print("  Record:  click the floating ● button, or Left Ctrl + Left Shift")
+    else:
+        print("  Hotkey:  Left Ctrl + Left Shift")
     print(f"  Server:  {SERVER_URL}")
+    print(f"  Logs:    {LOG_DIR / 'client.log'}")
     print()
 
     try:
@@ -301,13 +366,30 @@ def main():
             print(f"     {hint}")
 
     print()
-    print("  Listening for hotkey... (Ctrl+C to quit)")
+    print("  Ready. Ctrl+C to quit.")
     print("-" * 50)
 
+    global _overlay_active
+    # The hotkey listener runs in the background; the overlay (which needs the
+    # main thread for its UI loop) runs in the foreground.
+    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+    listener.start()
     try:
-        with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+        if overlay_enabled:
+            _overlay_active = True
+            try:
+                run_overlay(toggle_recording, current_status)
+            except Exception:
+                logger.exception("Overlay unavailable; falling back to hotkey only")
+                _overlay_active = False
+                print("  ⚠️  Floating button unavailable (no display?). Hotkey still works.")
+                listener.join()
+        else:
             listener.join()
+    except KeyboardInterrupt:
+        pass
     finally:
+        listener.stop()
         hide_toast()
 
 

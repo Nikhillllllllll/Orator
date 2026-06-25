@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, UploadFile, WebSocket, WebSocketDisconnect
@@ -26,6 +27,22 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s — %(message)s",
 )
+
+# Also persist logs to a rotating file so dropped phrases stay reviewable
+# (the streaming handler logs the final transcript + audio RMS at INFO).
+_LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
+try:
+    _LOG_DIR.mkdir(exist_ok=True)
+    _file_handler = RotatingFileHandler(
+        _LOG_DIR / "backend.log", maxBytes=1_000_000, backupCount=3
+    )
+    _file_handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s — %(message)s")
+    )
+    _file_handler.setLevel(logging.INFO)
+    logging.getLogger().addHandler(_file_handler)
+except OSError:
+    pass  # file logging is best-effort; never block startup on it
 
 app = FastAPI(title="Wisper", description="Voice dictation backend — ASR + LLM cleanup")
 

@@ -12,6 +12,9 @@ wheels/
 # Virtual environments
 .venv
 
+# Logs
+logs/
+
 # Test / cache
 .pytest_cache/
 
