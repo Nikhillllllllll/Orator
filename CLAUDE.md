@@ -20,7 +20,8 @@ so the pipeline still works offline.
 
 ## Commands
 
-- **Run server**: `uv run uvicorn backend.main:app --reload --port 8000`
+- **Dictate (default)**: `uv run dictate` — `client/launcher.py` starts the backend in the background, runs the hotkey client, and stops the backend on exit. Reuses an already-running backend.
+- **Run server only**: `uv run uvicorn backend.main:app --reload --port 8000`
 - **Run tests**: `uv run pytest tests/ -v`
 - **Run single test**: `uv run pytest tests/test_llm.py::test_name -v`
 - **Install local ASR**: `uv sync --extra local --extra mlx`

@@ -32,10 +32,22 @@ dependencies = [
     "websockets>=16.0",
 ]
 
+[project.scripts]
+# `uv run dictate` — start the backend + hotkey dictation client together.
+dictate = "client.launcher:main"
+
 [project.urls]
 Homepage = "https://github.com/Nikhillllllllll/Orator"
 Repository = "https://github.com/Nikhillllllllll/Orator"
 Issues = "https://github.com/Nikhillllllllll/Orator/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# Ship both the backend and the desktop client (the `dictate` entry point).
+packages = ["backend", "client"]
 
 [project.optional-dependencies]
 # Offline ASR — `uv sync --extra local`

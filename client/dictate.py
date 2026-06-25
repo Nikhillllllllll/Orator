@@ -38,7 +38,7 @@ PLATFORM = get_platform()
 # otherwise-swallowed errors (dropped sockets, failed paste, toast spawn, …).
 logger = logging.getLogger("wisper.client")
 
-SERVER_URL = "http://localhost:8000"
+SERVER_URL = os.environ.get("WISPER_SERVER_URL", "http://localhost:8000")
 SAMPLE_RATE = 16000
 CHANNELS = 1
 BLOCKSIZE = 1600  # 100 ms chunks at 16 kHz

@@ -27,10 +27,30 @@ audio -> ASR -> LLM cleanup -> cleaned text (or command JSON)
 ### Install and run
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/wisper.git
-cd wisper
+git clone https://github.com/Nikhillllllllll/Orator.git
+cd Orator
 cp .env.example .env          # fill in API keys, or leave blank for offline
 uv sync
+uv run dictate                # start backend + desktop dictation in one command
+```
+
+`uv run dictate` boots the backend in the background, then listens for the
+hotkey (**Left Ctrl + Left Shift**) to record; cleaned text is pasted at your
+cursor. The backend is stopped automatically when you quit (Ctrl+C). If a
+backend is already running, it's reused. Set `WISPER_DEBUG=1` to surface
+backend logs and otherwise-silent client errors.
+
+**Permissions** (first run): grant **Microphone** access, and on macOS also
+**Accessibility** (System Settings → Privacy & Security → Accessibility) so
+auto-paste works — otherwise text is left on the clipboard to paste manually.
+On Linux, install a clipboard helper (`wl-clipboard`, `xclip`, or `xsel`).
+
+### Backend only (API + web UI)
+
+Prefer to run the server by itself — for the browser UI at
+`http://localhost:8000`, or to host the API for remote clients:
+
+```bash
 uv run uvicorn backend.main:app --reload --port 8000
 ```
 
