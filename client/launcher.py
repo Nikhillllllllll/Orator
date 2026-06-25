@@ -9,8 +9,8 @@ it explicitly:
     uv run dictate --status   # is the backend running?
     uv run dictate --stop     # stop the backend
 
-Honors HOST / PORT from the environment and sets WISPER_SERVER_URL so the client
-targets the same address. WISPER_DEBUG=1 makes the backend log at debug level.
+Honors HOST / PORT from the environment and sets ORATOR_SERVER_URL so the client
+targets the same address. ORATOR_DEBUG=1 makes the backend log at debug level.
 """
 
 import os
@@ -39,7 +39,7 @@ def _backend_healthy(timeout: float = 1.0) -> bool:
 
 
 def _start_backend_detached() -> subprocess.Popen:
-    debug = bool(os.environ.get("WISPER_DEBUG"))
+    debug = bool(os.environ.get("ORATOR_DEBUG"))
     sink = None if debug else subprocess.DEVNULL
     return subprocess.Popen(
         [
@@ -162,7 +162,7 @@ def main() -> int:
     if "--status" in args:
         return _cmd_status()
 
-    os.environ.setdefault("WISPER_SERVER_URL", f"http://{HOST}:{PORT}")
+    os.environ.setdefault("ORATOR_SERVER_URL", f"http://{HOST}:{PORT}")
     if not _ensure_backend():
         return 1
 

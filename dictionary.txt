@@ -1,9 +1,9 @@
-# Wisper custom vocabulary — one term per line.
+# Orator custom vocabulary — one term per line.
 # These bias the ASR (so they're heard correctly) and tell the LLM how to spell
 # names, jargon, and acronyms. Lines starting with '#' are ignored.
 #
 # Examples (delete or replace with your own):
-Wisper
+Orator
 Anthropic
 Claude
 FastAPI

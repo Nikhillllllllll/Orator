@@ -1,4 +1,4 @@
-# Wisper — Voice Dictation Backend
+# Orator — Voice Dictation Backend
 
 ## Quick Start
 

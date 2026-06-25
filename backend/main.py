@@ -44,7 +44,7 @@ try:
 except OSError:
     pass  # file logging is best-effort; never block startup on it
 
-app = FastAPI(title="Wisper", description="Voice dictation backend — ASR + LLM cleanup")
+app = FastAPI(title="Orator", description="Voice dictation backend — ASR + LLM cleanup")
 
 STATIC_DIR = Path(__file__).parent / "static"
 

@@ -1,5 +1,5 @@
 [project]
-name = "wisper"
+name = "orator"
 version = "0.1.0"
 description = "Voice dictation backend — ASR + LLM cleanup"
 readme = "README.md"

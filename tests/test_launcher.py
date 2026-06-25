@@ -17,7 +17,7 @@ def _stub_client(monkeypatch) -> list[str]:
     fake = types.ModuleType("client.dictate")
     fake.main = lambda: calls.append("client_ran")
     monkeypatch.setitem(sys.modules, "client.dictate", fake)
-    monkeypatch.setenv("WISPER_SERVER_URL", "http://test")  # keep setdefault a no-op
+    monkeypatch.setenv("ORATOR_SERVER_URL", "http://test")  # keep setdefault a no-op
     monkeypatch.setattr(sys, "argv", ["dictate"])
     return calls
 

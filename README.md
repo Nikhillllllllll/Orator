@@ -59,7 +59,7 @@ uv run dictate --status   # is the backend running?
 uv run dictate --stop     # stop the backend
 ```
 
-Other knobs: `WISPER_DEBUG=1` surfaces backend logs and otherwise-silent client
+Other knobs: `ORATOR_DEBUG=1` surfaces backend logs and otherwise-silent client
 errors. Logs are written to `logs/backend.log` and `logs/client.log`.
 
 **Permissions** (first run): grant **Microphone** access, and on macOS also

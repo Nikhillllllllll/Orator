@@ -1,5 +1,5 @@
 """
-Wisper dictation client (macOS, Windows, Linux).
+Orator dictation client (macOS, Windows, Linux).
 
 Press Ctrl+Shift to start recording, press again to stop.
 Cleaned text is pasted at your cursor automatically.
@@ -38,11 +38,11 @@ except ImportError:
 
 PLATFORM = get_platform()
 
-# Quiet by default so the CLI stays clean; set WISPER_DEBUG=1 to surface the
+# Quiet by default so the CLI stays clean; set ORATOR_DEBUG=1 to surface the
 # otherwise-swallowed errors (dropped sockets, failed paste, toast spawn, …).
-logger = logging.getLogger("wisper.client")
+logger = logging.getLogger("orator.client")
 
-SERVER_URL = os.environ.get("WISPER_SERVER_URL", "http://localhost:8000")
+SERVER_URL = os.environ.get("ORATOR_SERVER_URL", "http://localhost:8000")
 SAMPLE_RATE = 16000
 CHANNELS = 1
 BLOCKSIZE = 1600  # 100 ms chunks at 16 kHz
@@ -324,7 +324,7 @@ def _running_client_pid() -> int | None:
 
 def _configure_logging() -> None:
     """Always log to a rotating file so dropped phrases stay reviewable; mirror
-    to the console only when WISPER_DEBUG is set."""
+    to the console only when ORATOR_DEBUG is set."""
     fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s — %(message)s")
     logger.setLevel(logging.DEBUG)
     logger.propagate = False
@@ -339,7 +339,7 @@ def _configure_logging() -> None:
     except OSError:
         pass  # logging to file is best-effort; never block dictation on it
 
-    if os.environ.get("WISPER_DEBUG"):
+    if os.environ.get("ORATOR_DEBUG"):
         console = logging.StreamHandler()
         console.setFormatter(fmt)
         logger.addHandler(console)
@@ -361,7 +361,7 @@ def main():
         pass
 
     print("=" * 50)
-    print("  Wisper — Voice Dictation")
+    print("  Orator — Voice Dictation")
     print("=" * 50)
     print("  Hotkey:  Left Ctrl + Left Shift")
     print(f"  Server:  {SERVER_URL}")

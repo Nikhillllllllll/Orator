@@ -1,4 +1,4 @@
-"""Cross-platform OS integration for the Wisper dictation client.
+"""Cross-platform OS integration for the Orator dictation client.
 
 The client needs five things from the host OS: read the foreground app, gather
 optional desktop context (e.g. browser tabs), put text on the clipboard,
@@ -21,7 +21,7 @@ import subprocess
 import sys
 import webbrowser
 
-logger = logging.getLogger("wisper.client")
+logger = logging.getLogger("orator.client")
 
 # Foreground app/window name (matched lowercase, substring) → dictation context.
 # Order matters: more specific keys first so they win over broader ones.

@@ -1,4 +1,4 @@
-"""Floating status HUD for the Wisper client.
+"""Floating status HUD for the Orator client.
 
 Run as a subprocess:  python toast.py "<message>" "<bg_hex>"
 
@@ -13,7 +13,7 @@ import tkinter as tk
 
 
 def main() -> None:
-    message = sys.argv[1] if len(sys.argv) > 1 else "Wisper"
+    message = sys.argv[1] if len(sys.argv) > 1 else "Orator"
     bg = sys.argv[2] if len(sys.argv) > 2 else "#222222"
 
     root = tk.Tk()
