@@ -14,6 +14,7 @@ app switching) lives in ``platforms.py``; this module is platform-neutral.
 """
 
 import json
+import logging
 import os
 import queue
 import subprocess
@@ -32,6 +33,10 @@ except ImportError:
     from platforms import get_platform
 
 PLATFORM = get_platform()
+
+# Quiet by default so the CLI stays clean; set WISPER_DEBUG=1 to surface the
+# otherwise-swallowed errors (dropped sockets, failed paste, toast spawn, …).
+logger = logging.getLogger("wisper.client")
 
 SERVER_URL = "http://localhost:8000"
 SAMPLE_RATE = 16000
@@ -58,6 +63,7 @@ def show_toast(spec: tuple[str, str]) -> None:
             stderr=subprocess.DEVNULL,
         )
     except Exception:
+        logger.debug("Could not spawn toast HUD", exc_info=True)
         _toast_proc = None
 
 
@@ -67,7 +73,7 @@ def hide_toast() -> None:
         try:
             _toast_proc.terminate()
         except Exception:
-            pass
+            logger.debug("Could not terminate toast HUD", exc_info=True)
     _toast_proc = None
 
 recording = False
@@ -123,11 +129,12 @@ def sender_loop(conn):
         try:
             conn.send(chunk)
         except Exception:
+            logger.debug("Send failed mid-stream; stopping sender", exc_info=True)
             return
     try:
         conn.send("END")
     except Exception:
-        pass
+        logger.debug("Could not send END marker", exc_info=True)
 
 
 def receiver_loop(conn, app_context: str):
@@ -163,13 +170,14 @@ def receiver_loop(conn, app_context: str):
                 print(f"\r✅ {label} ({total}s) | {app_context} | \"{clipped}\"")
                 return
     except Exception as e:
+        logger.debug("Receiver loop error", exc_info=True)
         print(f"\r❌ Stream error: {e}                          ")
     finally:
         hide_toast()
         try:
             conn.close()
         except Exception:
-            pass
+            logger.debug("Could not close websocket", exc_info=True)
 
 
 def start_recording():
@@ -183,6 +191,7 @@ def start_recording():
     try:
         conn = ws_connect(f"{ws_url}/ws/transcribe")
     except Exception:
+        logger.debug("WebSocket connect failed", exc_info=True)
         print("\r❌ Backend not running — start it with: uv run uvicorn backend.main:app --port 8000")
         return
 
@@ -258,6 +267,12 @@ def on_release(key):
 
 
 def main():
+    if os.environ.get("WISPER_DEBUG"):
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s %(levelname)s %(name)s — %(message)s",
+        )
+
     print("=" * 50)
     print("  Wisper — Voice Dictation")
     print("=" * 50)
@@ -269,6 +284,7 @@ def main():
         httpx.get(f"{SERVER_URL}/health", timeout=3)
         print("  ✅ Backend connected")
     except Exception:
+        logger.debug("Health check failed", exc_info=True)
         print("  ⚠️  Backend not reachable — start it first")
 
     if PLATFORM.input_permission_ok():

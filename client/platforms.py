@@ -15,10 +15,13 @@ display to attach to.
 
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 import sys
 import webbrowser
+
+logger = logging.getLogger("wisper.client")
 
 # Foreground app/window name (matched lowercase, substring) → dictation context.
 # Order matters: more specific keys first so they win over broader ones.
@@ -64,6 +67,7 @@ def _run(cmd: list[str], timeout: float = 3.0) -> subprocess.CompletedProcess | 
     try:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except Exception:
+        logger.debug("Command failed: %s", cmd[0], exc_info=True)
         return None
 
 
@@ -101,6 +105,7 @@ class Platform:
         try:
             return webbrowser.open(url)
         except Exception:
+            logger.debug("Could not open URL: %s", url, exc_info=True)
             return False
 
     def paste(self) -> bool:
@@ -115,6 +120,7 @@ class Platform:
                 kb.release("v")
             return True
         except Exception:
+            logger.debug("Synthetic paste failed", exc_info=True)
             return False
 
     def copy_and_paste(self, text: str) -> bool:
@@ -171,6 +177,7 @@ class MacPlatform(Platform):
             proc.communicate(text.encode("utf-8"))
             return proc.returncode == 0
         except Exception:
+            logger.debug("pbcopy failed", exc_info=True)
             return False
 
     def activate_app(self, app: str) -> bool:
@@ -216,6 +223,7 @@ class WindowsPlatform(Platform):
             user32.GetWindowTextW(hwnd, buf, length + 1)
             return categorize_app(buf.value)
         except Exception:
+            logger.debug("GetForegroundWindow failed", exc_info=True)
             return "default"
 
     def set_clipboard(self, text: str) -> bool:
@@ -229,6 +237,7 @@ class WindowsPlatform(Platform):
             )
             return proc.returncode == 0
         except Exception:
+            logger.debug("Set-Clipboard failed", exc_info=True)
             return False
 
 
@@ -264,6 +273,7 @@ class LinuxPlatform(Platform):
             proc = subprocess.run(self._clip_cmd, input=text.encode("utf-8"), timeout=5)
             return proc.returncode == 0
         except Exception:
+            logger.debug("Clipboard tool failed: %s", self._clip_cmd[0], exc_info=True)
             return False
 
     def input_permission_ok(self) -> bool:
