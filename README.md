@@ -1,4 +1,4 @@
-# Wisper
+# Orator
 
 Voice dictation backend that pipes audio through ASR and LLM cleanup to produce polished text. Works fully offline or with cloud providers.
 
