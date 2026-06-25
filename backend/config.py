@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     # A pause of this many seconds finalizes ("commits") the current segment so
     # it's never re-transcribed again — keeps cost bounded on long dictation.
     stream_commit_silence_s: float = 0.6
+    # RMS (0..1) below which audio is treated as silence and ASR is skipped
+    # (Whisper hallucinates on silence). Lower it for a quiet mic; raise it if
+    # background noise is being transcribed. Override with STREAM_SILENCE_RMS.
+    stream_silence_rms: float = 0.006
 
     # --- Server ---
     host: str = "0.0.0.0"

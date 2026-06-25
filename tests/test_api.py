@@ -183,7 +183,7 @@ def test_websocket_streaming_empty_reports_audio_level():
                 if msg.get("stage") == "final":
                     assert msg["text"] == ""
                     assert isinstance(msg["audio_rms"], float) and msg["audio_rms"] > 0
-                    assert msg["silence_threshold"] == 0.01
+                    assert msg["silence_threshold"] == settings.stream_silence_rms
                     break
             else:
                 pytest.fail("never received a final message")

@@ -217,38 +217,33 @@ def receiver_loop(conn, app_context: str):
             logger.debug("Could not close websocket", exc_info=True)
 
 
+def _abort_recording() -> None:
+    """Tear down a half-started recording (e.g. the socket connect failed)."""
+    global recording, stream
+    recording = False
+    _set_status("idle")
+    if stream:
+        stream.stop()
+        stream.close()
+        stream = None
+    while not send_q.empty():
+        send_q.get_nowait()
+    hide_toast()
+
+
 def start_recording():
     global recording, stream
     if recording:
         return
-    app_context = PLATFORM.active_app()
-    screen_text = PLATFORM.desktop_context()
-    ws_url = SERVER_URL.replace("http://", "ws://").replace("https://", "wss://")
 
-    try:
-        conn = ws_connect(f"{ws_url}/ws/transcribe")
-    except Exception:
-        logger.debug("WebSocket connect failed", exc_info=True)
-        print("\r❌ Backend not running — start it with: uv run uvicorn backend.main:app --port 8000")
-        return
-
-    conn.send(json.dumps({
-        "app_context": app_context,
-        "screen_text": screen_text,
-        "mode": "stream",
-        "sample_rate": SAMPLE_RATE,
-    }))
-
-    # Drain any stale audio from a previous session.
+    # Start capturing IMMEDIATELY — before the (sometimes slow) window-context
+    # osascript calls and the socket connect — so multi-second AppleScript
+    # timeouts can't clip the start of what you say. Audio buffers in send_q
+    # until the sender thread starts and flushes it.
     while not send_q.empty():
         send_q.get_nowait()
-
     recording = True
     _set_status("recording")
-    logger.info("recording started (app=%s)", app_context)
-    threading.Thread(target=sender_loop, args=(conn,), daemon=True).start()
-    threading.Thread(target=receiver_loop, args=(conn, app_context), daemon=True).start()
-
     stream = sd.InputStream(
         samplerate=SAMPLE_RATE,
         channels=CHANNELS,
@@ -259,6 +254,27 @@ def start_recording():
     stream.start()
     show_toast(TOAST_RECORDING)
     print("\r🎙  Recording... (click/hotkey again to stop)", end="", flush=True)
+
+    app_context = PLATFORM.active_app()
+    screen_text = PLATFORM.desktop_context()
+    ws_url = SERVER_URL.replace("http://", "ws://").replace("https://", "wss://")
+    try:
+        conn = ws_connect(f"{ws_url}/ws/transcribe")
+    except Exception:
+        logger.debug("WebSocket connect failed", exc_info=True)
+        print("\r❌ Backend not running — start it with: uv run dictate")
+        _abort_recording()
+        return
+
+    conn.send(json.dumps({
+        "app_context": app_context,
+        "screen_text": screen_text,
+        "mode": "stream",
+        "sample_rate": SAMPLE_RATE,
+    }))
+    logger.info("recording started (app=%s)", app_context)
+    threading.Thread(target=sender_loop, args=(conn,), daemon=True).start()
+    threading.Thread(target=receiver_loop, args=(conn, app_context), daemon=True).start()
 
 
 def stop_recording():

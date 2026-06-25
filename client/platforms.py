@@ -152,11 +152,13 @@ class MacPlatform(Platform):
     def desktop_context(self) -> str:
         parts: list[str] = []
 
+        # Tight timeouts: this runs before recording starts, and a hung
+        # AppleScript (e.g. an un-granted Automation prompt) must not stall it.
         apps = _run([
             "osascript", "-e",
             'tell application "System Events" to get name of every '
             "application process whose visible is true",
-        ])
+        ], timeout=1.0)
         if apps and apps.returncode == 0 and apps.stdout.strip():
             parts.append(f"Open apps: {apps.stdout.strip()}")
 
@@ -165,7 +167,10 @@ class MacPlatform(Platform):
             ("Google Chrome", "title", "Chrome tabs"),
             ("Safari", "name", "Safari tabs"),
         ):
-            tabs = _run(["osascript", "-e", _BROWSER_TABS_SCRIPT.format(app=app, prop=prop)])
+            tabs = _run(
+                ["osascript", "-e", _BROWSER_TABS_SCRIPT.format(app=app, prop=prop)],
+                timeout=1.0,
+            )
             if tabs and tabs.returncode == 0 and tabs.stdout.strip():
                 parts.append(f"{label}: {tabs.stdout.strip()}")
 

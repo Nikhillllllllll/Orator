@@ -278,6 +278,7 @@ async def _handle_streaming(ws: WebSocket, cfg: dict, meta: TranscribeMetadata) 
         interval_s=settings.stream_interval_s,
         min_new_s=settings.stream_min_new_s,
         commit_silence_s=settings.stream_commit_silence_s,
+        silence_rms=settings.stream_silence_rms,
     )
     stop = asyncio.Event()
 
