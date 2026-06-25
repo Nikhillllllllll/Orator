@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wisper</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0a0a;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 2rem;
+      color: #fff;
+      letter-spacing: -0.02em;
+    }
+    h1 span { color: #6366f1; }
+
+    .controls {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      margin-bottom: 2rem;
+    }
+    select {
+      background: #1a1a1a;
+      color: #e0e0e0;
+      border: 1px solid #333;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    select:focus { outline: none; border-color: #6366f1; }
+
+    .record-btn {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: 3px solid #333;
+      background: #1a1a1a;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      position: relative;
+    }
+    .record-btn:hover { border-color: #6366f1; }
+    .record-btn.recording {
+      border-color: #ef4444;
+      animation: pulse 1.5s infinite;
+    }
+    .record-btn .dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #6366f1;
+      transition: all 0.2s;
+    }
+    .record-btn.recording .dot {
+      background: #ef4444;
+      border-radius: 6px;
+      width: 24px;
+      height: 24px;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+      50% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+    }
+
+    .hint {
+      font-size: 0.8rem;
+      color: #666;
+      margin-bottom: 2rem;
+    }
+
+    .results {
+      width: 100%;
+      max-width: 600px;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .result-card {
+      background: #1a1a1a;
+      border: 1px solid #262626;
+      border-radius: 12px;
+      padding: 1.25rem;
+      display: none;
+      transition: opacity 0.2s;
+    }
+    .result-card.visible { display: block; }
+    .result-card label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #888;
+      margin-bottom: 0.5rem;
+      display: block;
+    }
+    .result-card .text {
+      font-size: 1rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      color: #fff;
+    }
+    .result-card.raw .text { color: #999; font-style: italic; }
+
+    .timing {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .timing .badge {
+      background: #262626;
+      padding: 0.3rem 0.7rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .timing .badge span { color: #6366f1; font-weight: 600; }
+
+    .status {
+      font-size: 0.85rem;
+      color: #666;
+      margin-bottom: 1rem;
+      min-height: 1.2em;
+    }
+    .status.error { color: #ef4444; }
+    .status.processing { color: #6366f1; }
+  </style>
+</head>
+<body>
+  <h1><span>Wisper</span> Voice Dictation</h1>
+
+  <div class="controls">
+    <select id="appContext">
+      <option value="default">Default</option>
+      <option value="slack">Slack</option>
+      <option value="email">Email</option>
+      <option value="imessage">iMessage</option>
+      <option value="discord">Discord</option>
+      <option value="vscode">VS Code</option>
+      <option value="notes">Notes</option>
+      <option value="docs">Docs</option>
+    </select>
+  </div>
+
+  <button class="record-btn" id="recordBtn">
+    <div class="dot"></div>
+  </button>
+  <p class="hint">Click to record, click again to stop</p>
+
+  <p class="status" id="status"></p>
+
+  <div class="results">
+    <div class="result-card" id="cleanedCard">
+      <label>Cleaned Output</label>
+      <div class="text" id="cleanedText"></div>
+    </div>
+    <div class="result-card raw" id="rawCard">
+      <label>Raw Transcript</label>
+      <div class="text" id="rawText"></div>
+    </div>
+    <div class="result-card" id="timingCard">
+      <label>Timing</label>
+      <div class="timing" id="timingBadges"></div>
+    </div>
+  </div>
+
+  <script>
+    const btn = document.getElementById('recordBtn');
+    const status = document.getElementById('status');
+    const appContext = document.getElementById('appContext');
+    const cleanedCard = document.getElementById('cleanedCard');
+    const cleanedText = document.getElementById('cleanedText');
+    const rawCard = document.getElementById('rawCard');
+    const rawText = document.getElementById('rawText');
+    const timingCard = document.getElementById('timingCard');
+    const timingBadges = document.getElementById('timingBadges');
+
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let recording = false;
+
+    btn.addEventListener('click', async () => {
+      if (!recording) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+          audioChunks = [];
+
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) audioChunks.push(e.data);
+          };
+
+          mediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            const blob = new Blob(audioChunks, { type: 'audio/webm' });
+            await sendAudio(blob);
+          };
+
+          mediaRecorder.start(100);
+          recording = true;
+          btn.classList.add('recording');
+          status.textContent = 'Recording...';
+          status.className = 'status';
+        } catch (err) {
+          status.textContent = 'Microphone access denied';
+          status.className = 'status error';
+        }
+      } else {
+        mediaRecorder.stop();
+        recording = false;
+        btn.classList.remove('recording');
+        status.textContent = 'Processing...';
+        status.className = 'status processing';
+      }
+    });
+
+    async function sendAudio(blob) {
+      cleanedCard.classList.remove('visible');
+      rawCard.classList.remove('visible');
+      timingCard.classList.remove('visible');
+
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${protocol}//${location.host}/ws/transcribe`);
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ app_context: appContext.value }));
+        blob.arrayBuffer().then(buf => {
+          ws.send(buf);
+          ws.send('END');
+        });
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.error) {
+          status.textContent = data.error;
+          status.className = 'status error';
+          return;
+        }
+
+        if (data.stage === 'partial') {
+          cleanedText.textContent = data.text;
+          cleanedCard.classList.add('visible');
+          cleanedCard.style.opacity = '0.6';
+          rawText.textContent = data.text;
+          rawCard.classList.add('visible');
+          status.textContent = 'Cleaning up...';
+          status.className = 'status processing';
+        } else if (data.stage === 'final') {
+          if (data.command) {
+            cleanedText.textContent = `Command: ${data.command}`;
+            cleanedCard.classList.add('visible');
+            cleanedCard.style.opacity = '1';
+            rawCard.classList.remove('visible');
+            timingCard.classList.remove('visible');
+          } else {
+            cleanedText.textContent = data.text;
+            cleanedCard.classList.add('visible');
+            cleanedCard.style.opacity = '1';
+            rawText.textContent = data.raw_transcript;
+            rawCard.classList.add('visible');
+
+            if (data.timing) {
+              timingBadges.innerHTML = Object.entries(data.timing)
+                .map(([k, v]) => `<div class="badge">${k}: <span>${v}s</span></div>`)
+                .join('');
+              timingCard.classList.add('visible');
+            }
+          }
+          status.textContent = '';
+        }
+      };
+
+      ws.onerror = () => {
+        status.textContent = 'Connection failed — is the server running?';
+        status.className = 'status error';
+      };
+    }
+  </script>
+</body>
+</html>
