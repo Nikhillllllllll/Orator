@@ -31,11 +31,9 @@ from websockets.sync.client import connect as ws_connect
 
 try:  # works both as `python -m client.dictate` and `python client/dictate.py`
     from client.diagnostics import describe_no_speech
-    from client.overlay import run_overlay
     from client.platforms import get_platform
 except ImportError:
     from diagnostics import describe_no_speech
-    from overlay import run_overlay
     from platforms import get_platform
 
 PLATFORM = get_platform()
@@ -51,6 +49,11 @@ BLOCKSIZE = 1600  # 100 ms chunks at 16 kHz
 HOTKEY = {keyboard.Key.ctrl_l, keyboard.Key.shift_l}
 
 TOAST_SCRIPT = os.path.join(os.path.dirname(__file__), "toast.py")
+OVERLAY_SCRIPT = os.path.join(os.path.dirname(__file__), "overlay.py")
+LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
+# Tiny file channel between the client and the (subprocess) floating button.
+OVERLAY_CMD = LOG_DIR / "overlay.cmd"        # button -> client ("toggle")
+OVERLAY_STATUS = LOG_DIR / "overlay.status"  # client -> button (status name)
 TOAST_RECORDING = ("●  Recording…", "#c0392b")
 TOAST_TRANSCRIBING = ("●  Transcribing…", "#b9770e")
 TOAST_TYPING = ("●  Typing…", "#1e8449")
@@ -309,7 +312,38 @@ def on_release(key):
         hotkey_active = False
 
 
-LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
+def _spawn_button() -> subprocess.Popen | None:
+    """Launch the floating button in its own process (isolated from the client
+    so a tkinter failure can't kill dictation)."""
+    try:
+        OVERLAY_CMD.unlink(missing_ok=True)  # clear any stale command
+        OVERLAY_STATUS.write_text(current_status())
+    except OSError:
+        pass
+    try:
+        return subprocess.Popen(
+            [sys.executable, OVERLAY_SCRIPT, str(OVERLAY_CMD), str(OVERLAY_STATUS)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        logger.debug("Could not spawn floating button", exc_info=True)
+        return None
+
+
+def _overlay_ipc_loop(stop: threading.Event) -> None:
+    """Bridge the button process: publish status, act on its toggle clicks."""
+    while not stop.is_set():
+        try:
+            OVERLAY_STATUS.write_text(current_status())
+            if OVERLAY_CMD.exists():
+                cmd = OVERLAY_CMD.read_text().strip()
+                OVERLAY_CMD.unlink(missing_ok=True)
+                if cmd == "toggle":
+                    toggle_recording()
+        except OSError:
+            logger.debug("Overlay IPC error", exc_info=True)
+        stop.wait(0.1)
 
 
 def _configure_logging() -> None:
@@ -370,25 +404,29 @@ def main():
     print("-" * 50)
 
     global _overlay_active
-    # The hotkey listener runs in the background; the overlay (which needs the
-    # main thread for its UI loop) runs in the foreground.
+    # The hotkey listener and the floating button (a separate process) both run
+    # in the background; the main thread blocks on the listener. tkinter never
+    # runs in this process, so a GUI hiccup can't take dictation down.
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.start()
+
+    button_proc = None
+    ipc_stop = threading.Event()
+    if overlay_enabled:
+        _overlay_active = True  # mute the toast HUD; the button shows status
+        button_proc = _spawn_button()
+        threading.Thread(
+            target=_overlay_ipc_loop, args=(ipc_stop,), daemon=True
+        ).start()
+
     try:
-        if overlay_enabled:
-            _overlay_active = True
-            try:
-                run_overlay(toggle_recording, current_status)
-            except Exception:
-                logger.exception("Overlay unavailable; falling back to hotkey only")
-                _overlay_active = False
-                print("  ⚠️  Floating button unavailable (no display?). Hotkey still works.")
-                listener.join()
-        else:
-            listener.join()
+        listener.join()
     except KeyboardInterrupt:
         pass
     finally:
+        ipc_stop.set()
+        if button_proc and button_proc.poll() is None:
+            button_proc.terminate()
         listener.stop()
         hide_toast()
 

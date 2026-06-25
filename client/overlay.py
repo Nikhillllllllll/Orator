@@ -1,16 +1,19 @@
-"""Always-on-top floating record button — an alternative to the hotkey.
+"""Floating record button — runs as its own process (like the status toast).
 
-Click to start dictation, click again to stop (two clicks, then the cleaned
-text is pasted). The puck reflects state by color: grey idle, red recording,
-amber processing. On macOS it's created non-activating (like the status toast)
-so clicking it does NOT steal focus from the app you're dictating into — which
-would otherwise send the auto-paste to the wrong window.
+Isolating tkinter in a subprocess keeps a GUI hiccup from taking down the
+dictation client. The client and this button talk through two tiny files: the
+client writes the current status for us to display, and we write a "toggle"
+command back when the button is clicked.
 
-`tkinter` is imported inside `run_overlay`, so this module stays import-safe on
-a headless box (CI) where there's no display to attach to.
+    python overlay.py <cmd_file> <status_file>
+
+`tkinter` is imported inside `run_button`, so the module stays import-safe on a
+headless box (CI) where there's no display.
 """
 
-from collections.abc import Callable
+import os
+import sys
+from pathlib import Path
 
 # status -> (glyph, background color)
 STYLES = {
@@ -25,12 +28,11 @@ def style_for(status: str) -> tuple[str, str]:
     return STYLES.get(status, STYLES["idle"])
 
 
-def run_overlay(toggle: Callable[[], None], status: Callable[[], str]) -> None:
-    """Show the floating button and block until the window closes / Ctrl+C.
+def run_button(cmd_file: Path, status_file: Path) -> None:
+    """Show the floating button until the window closes / the process is killed.
 
-    `toggle` starts or stops recording; `status` returns the current status
-    string, polled to keep the button in sync with the background threads that
-    actually drive recording.
+    Clicking writes "toggle" to `cmd_file`; the button's color tracks the status
+    the client writes to `status_file`.
     """
     import tkinter as tk
 
@@ -41,8 +43,8 @@ def run_overlay(toggle: Callable[[], None], status: Callable[[], str]) -> None:
         root.attributes("-alpha", 0.95)
     except tk.TclError:
         pass
-    # macOS: float without ever becoming the active window (so focus — and thus
-    # the auto-paste target — stays on the app being dictated into).
+    # macOS: float without ever becoming the active window, so clicking the
+    # button doesn't pull focus off the app being dictated into.
     try:
         root.tk.call(
             "::tk::unsupported::MacWindowStyle", "style", root._w, "help", "noActivates"
@@ -50,13 +52,24 @@ def run_overlay(toggle: Callable[[], None], status: Callable[[], str]) -> None:
     except tk.TclError:
         pass
 
-    glyph, color = style_for(status())
+    glyph, color = style_for("idle")
     button = tk.Label(
         root, text=glyph, fg="white", bg=color,
         font=("Helvetica Neue", 22, "bold"), padx=18, pady=10, cursor="hand2",
     )
     button.pack()
-    button.bind("<Button-1>", lambda _e: toggle())
+
+    def on_click(_event):
+        # Atomic write (temp + rename) so the client never reads a half-written
+        # command file and discards it.
+        try:
+            tmp = cmd_file.with_suffix(".tmp")
+            tmp.write_text("toggle")
+            os.replace(tmp, cmd_file)
+        except OSError:
+            pass
+
+    button.bind("<Button-1>", on_click)
 
     # Right-drag to reposition the puck.
     drag = {"x": 0, "y": 0}
@@ -74,12 +87,18 @@ def run_overlay(toggle: Callable[[], None], status: Callable[[], str]) -> None:
     w, h = root.winfo_width(), root.winfo_height()
     root.geometry(f"+{sw - w - 40}+{sh - h - 120}")
 
-    # Poll status -> repaint. The periodic callback also keeps the interpreter
-    # ticking so Ctrl+C is delivered while mainloop is running.
     def refresh() -> None:
-        text, bg = style_for(status())
+        try:
+            status = status_file.read_text().strip()
+        except OSError:
+            status = "idle"
+        text, bg = style_for(status)
         button.config(text=text, bg=bg)
         root.after(120, refresh)
 
     refresh()
     root.mainloop()
+
+
+if __name__ == "__main__":
+    run_button(Path(sys.argv[1]), Path(sys.argv[2]))
