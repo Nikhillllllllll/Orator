@@ -23,16 +23,28 @@ audio -> ASR -> LLM cleanup -> cleaned text (or command JSON)
 
 - Python 3.13+
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- [ffmpeg](https://ffmpeg.org/) (audio decoding) — `brew install ffmpeg` on macOS
+- **One API key** (free) — or nothing at all if you run fully offline (see below)
 
 ### Install and run
 
 ```bash
 git clone https://github.com/Nikhillllllllll/Orator.git
 cd Orator
-cp .env.example .env          # fill in API keys, or leave blank for offline
+cp .env.example .env          # then add your API key (next step)
 uv sync
-uv run dictate                # start backend + desktop dictation in one command
+uv run dictate                # starts the backend + dictation in one command
 ```
+
+**Add an API key.** Open `.env` and paste a key into one line. The fastest is a
+free **Groq** key from [console.groq.com](https://console.groq.com/keys) (used
+for both speech-to-text and cleanup by default):
+
+```
+GROQ_API_KEY=gsk_your_key_here
+```
+
+Prefer no keys at all? Skip this and jump to [Fully offline](#fully-offline-local-models).
 
 `uv run dictate` ensures the backend is running, then starts the desktop client.
 Press the hotkey (**Left Ctrl + Left Shift**) to start recording, press it again
@@ -103,7 +115,7 @@ All configuration is via environment variables. See [`.env.example`](.env.exampl
 
 ```bash
 curl -X POST http://localhost:8000/api/transcribe \
-  -F "file=@recording.wav"
+  -F "audio=@recording.wav"
 ```
 
 ### WebSocket
