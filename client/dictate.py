@@ -54,6 +54,7 @@ LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 # Tiny file channel between the client and the (subprocess) floating button.
 OVERLAY_CMD = LOG_DIR / "overlay.cmd"        # button -> client ("toggle")
 OVERLAY_STATUS = LOG_DIR / "overlay.status"  # client -> button (status name)
+CLIENT_PID_FILE = LOG_DIR / "client.pid"     # single-instance guard
 TOAST_RECORDING = ("●  Recording…", "#c0392b")
 TOAST_TRANSCRIBING = ("●  Transcribing…", "#b9770e")
 TOAST_TYPING = ("●  Typing…", "#1e8449")
@@ -328,6 +329,25 @@ def on_release(key):
         hotkey_active = False
 
 
+def _running_client_pid() -> int | None:
+    """Pid of an already-running client, or None (treats a dead pid as stale)."""
+    try:
+        pid = int(CLIENT_PID_FILE.read_text().strip())
+    except (OSError, ValueError):
+        return None
+    if pid == os.getpid():
+        return None
+    try:
+        os.kill(pid, 0)  # signal 0 = existence check, doesn't actually signal
+    except ProcessLookupError:
+        return None  # ESRCH: process is gone; pidfile is stale
+    except PermissionError:
+        return pid  # EPERM: exists but owned by another user — still running
+    except OSError:
+        return None
+    return pid
+
+
 def _spawn_button() -> subprocess.Popen | None:
     """Launch the floating button in its own process (isolated from the client
     so a tkinter failure can't kill dictation)."""
@@ -387,6 +407,19 @@ def _configure_logging() -> None:
 
 def main():
     _configure_logging()
+
+    # Single-instance guard: a second client would add another hotkey listener
+    # and double-type everything you say.
+    existing = _running_client_pid()
+    if existing:
+        print(f"  ⚠️  A dictation client is already running (pid {existing}).")
+        print("     Quit it first (Ctrl+C in its terminal) — two clients double-type.")
+        return
+    try:
+        CLIENT_PID_FILE.write_text(str(os.getpid()))
+    except OSError:
+        pass
+
     overlay_enabled = not os.environ.get("WISPER_NO_OVERLAY")
 
     print("=" * 50)
@@ -445,6 +478,10 @@ def main():
             button_proc.terminate()
         listener.stop()
         hide_toast()
+        try:
+            CLIENT_PID_FILE.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":
