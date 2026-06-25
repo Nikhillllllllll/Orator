@@ -20,7 +20,7 @@ so the pipeline still works offline.
 
 ## Commands
 
-- **Dictate (default)**: `uv run dictate` — `client/launcher.py` starts the backend in the background, runs the hotkey client, and stops the backend on exit. Reuses an already-running backend.
+- **Dictate (default)**: `uv run dictate` — `client/launcher.py` ensures a **persistent, detached** backend is up (started with `start_new_session=True`, tracked via `logs/backend.pid`), then runs the client (floating button + hotkey). The backend is reused if already running and is **not** stopped on client exit. Manage with `uv run dictate --status` / `--stop`.
 - **Run server only**: `uv run uvicorn backend.main:app --reload --port 8000`
 - **Run tests**: `uv run pytest tests/ -v`
 - **Run single test**: `uv run pytest tests/test_llm.py::test_name -v`
