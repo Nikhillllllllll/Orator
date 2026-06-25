@@ -166,6 +166,29 @@ def test_websocket_streaming_emits_final():
                 pytest.fail("never received a final message")
 
 
+def test_websocket_streaming_empty_reports_audio_level():
+    # ASR returns nothing despite real (non-silent) audio → the final must carry
+    # the measured level + threshold so the client can explain why.
+    mock_asr = AsyncMock()
+    mock_asr.transcribe.return_value = ASRResult(text="", confidence=None, language=None)
+
+    with patch("backend.main.get_asr", return_value=mock_asr):
+        with client.websocket_connect("/ws/transcribe") as ws:
+            ws.send_text(json.dumps({"mode": "stream", "sample_rate": 16000}))
+            ws.send_bytes(PCM_ONE_SECOND)
+            ws.send_text("END")
+
+            for _ in range(20):
+                msg = ws.receive_json()
+                if msg.get("stage") == "final":
+                    assert msg["text"] == ""
+                    assert isinstance(msg["audio_rms"], float) and msg["audio_rms"] > 0
+                    assert msg["silence_threshold"] == 0.01
+                    break
+            else:
+                pytest.fail("never received a final message")
+
+
 def test_websocket_no_audio_reports_error():
     with client.websocket_connect("/ws/transcribe") as ws:
         ws.send_text(json.dumps({"app_context": "default"}))

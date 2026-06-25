@@ -141,15 +141,24 @@ async def websocket_transcribe(ws: WebSocket):
 
 
 async def _finalize_and_send(
-    ws: WebSocket, meta: TranscribeMetadata, raw_text: str, voice_hint: str, prior_timing: dict
+    ws: WebSocket,
+    meta: TranscribeMetadata,
+    raw_text: str,
+    voice_hint: str,
+    prior_timing: dict,
+    audio_rms: float | None = None,
+    silence_threshold: float | None = None,
 ) -> None:
     """Run LLM cleanup on the final transcript and send the terminal message."""
     logger = logging.getLogger("ws")
 
     if not raw_text.strip():
+        # Empty transcript: pass the measured level + gate so the client can tell
+        # a silent mic from too-quiet speech from an audible-but-empty result.
         await ws.send_json({
             "stage": "final", "text": "", "raw_transcript": "",
             "app_context": meta.app_context, "timing": prior_timing,
+            "audio_rms": audio_rms, "silence_threshold": silence_threshold,
         })
         await ws.close()
         return
@@ -294,5 +303,12 @@ async def _handle_streaming(ws: WebSocket, cfg: dict, meta: TranscribeMetadata) 
 
     stats = audio_stats(st.last_wav) if st.last_wav else None
     voice_hint = describe_voice(stats, len(result.text.split()), result)
-    logger.info("Stream final (%.1fs audio): %s", st.buffered_seconds, result.text[:100])
-    await _finalize_and_send(ws, meta, result.text, voice_hint, {})
+    audio_rms = stats["rms"] if stats else None
+    logger.info(
+        "Stream final (%.1fs audio, rms=%s): %s",
+        st.buffered_seconds, audio_rms, result.text[:100],
+    )
+    await _finalize_and_send(
+        ws, meta, result.text, voice_hint, {},
+        audio_rms=audio_rms, silence_threshold=st.silence_threshold,
+    )

@@ -71,6 +71,11 @@ class StreamingTranscriber:
         return len(self._buffer) > 0
 
     @property
+    def silence_threshold(self) -> float:
+        """RMS below which audio is treated as silence (ASR is skipped)."""
+        return self._silence_rms
+
+    @property
     def buffered_seconds(self) -> float:
         return len(self._buffer) / self._bytes_per_s
 

@@ -28,8 +28,10 @@ from pynput import keyboard
 from websockets.sync.client import connect as ws_connect
 
 try:  # works both as `python -m client.dictate` and `python client/dictate.py`
+    from client.diagnostics import describe_no_speech
     from client.platforms import get_platform
 except ImportError:
+    from diagnostics import describe_no_speech
     from platforms import get_platform
 
 PLATFORM = get_platform()
@@ -159,7 +161,10 @@ def receiver_loop(conn, app_context: str):
                     return
                 text = data.get("text", "")
                 if not text:
-                    print("\r⚠️  No speech detected.                       ")
+                    msg = describe_no_speech(
+                        data.get("audio_rms"), data.get("silence_threshold")
+                    )
+                    print(f"\r⚠️  {msg}")
                     return
                 show_toast(TOAST_TYPING)
                 pasted = paste_text(text)
